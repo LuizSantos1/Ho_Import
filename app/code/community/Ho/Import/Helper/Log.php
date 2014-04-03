@@ -58,7 +58,7 @@ class Ho_Import_Helper_Log extends Mage_Core_Helper_Abstract
         }
 
         if ($this->_mode == self::LOG_MODE_CLI) {
-            $date = date("Y-m-d H:i:s", Mage::getModel('core/date')->timestamp(time()));
+            $date = date("H:i:s", Mage::getModel('core/date')->timestamp(time()));
 
             if (is_array($message) && is_array(reset($message))) {
                 $message = $this->_renderCliTable($message, $level);
@@ -307,6 +307,6 @@ class Ho_Import_Helper_Log extends Mage_Core_Helper_Abstract
     public function convert($size)
     {
         $unit=array('B','KB','MB','GB','TB','PB');
-        return @round($size/pow(1024,($i=floor(log($size,1024)))),2).$unit[$i];
+        return @round($size/pow(1024,($i=floor(log($size,1024))))).$unit[$i];
     }
 }

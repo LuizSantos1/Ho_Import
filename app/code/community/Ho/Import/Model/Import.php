@@ -83,7 +83,11 @@ class Ho_Import_Model_Import extends Varien_Object
         }
 
         $this->_getLog()->log($this->_getLog()->__('Mapping source fields and saving to temp csv file (%s)', $this->_getFileName()));
-        $this->_createImportCsv();
+        $hasRows = $this->_createImportCsv();
+        if (! $hasRows) {
+            $this->_runEvent('process_after');
+            return;
+        }
 
         $this->_applyImportOptions();
         if ($this->getDryrun()) {
@@ -162,21 +166,23 @@ class Ho_Import_Model_Import extends Varien_Object
             $transport->setData('items', array($sourceRows[$line]));
             $this->_runEvent('source_row_fieldmap_before', $transport);
             if ($transport->getData('skip')) {
-                $this->_getLog()->log($this->_getLog()->__('This line (%s) would be skipped', $line), Zend_Log::WARN);
-            }
+                $this->_getLog()->log($this->_getLog()->__('Skip flag is set for line (%s) in event source_row_fieldmap_before', $line), Zend_Log::WARN);
+                $this->_getLog()->log($transport->getData('items'), Zend_Log::DEBUG);
+                return;
+            } else {
+                $this->_getLog()->log($transport->getData('items'), Zend_Log::DEBUG);
 
-            $this->_getLog()->log($transport->getData('items'), Zend_Log::DEBUG);
+                $i = 0;
+                foreach ($transport->getData('items') as $preparedItem) {
+                    $results = $this->_fieldMapItem($preparedItem);
 
-            $i = 0;
-            foreach ($transport->getData('items') as $preparedItem) {
-                $results = $this->_fieldMapItem($preparedItem);
+                    foreach ($results as $result) {
+                        $i++;
 
-                foreach ($results as $result) {
-                    $i++;
-
-                    $entities[]                    = $result;
-                    $logEntities[$line . ':' . $i] = $result;
-                    $entityMap[]                   = $line . ':' . $i;
+                        $entities[]                    = $result;
+                        $logEntities[$line . ':' . $i] = $result;
+                        $entityMap[]                   = $line . ':' . $i;
+                    }
                 }
             }
         }
@@ -300,7 +306,11 @@ class Ho_Import_Model_Import extends Varien_Object
         $rowsPerSecond = $seconds ? round($this->getRowCount() / $seconds, 2) : $this->getRowCount();
         $this->_getLog()->log("Fieldmapping {$this->getProfile()} with {$this->getRowCount()} rows (done in $seconds seconds, $rowsPerSecond rows/s)");
 
-        return TRUE;
+        if ($this->getRowCount()) {
+            return true;
+        } else {
+            return false;
+        }
     }
 
     /**
@@ -527,7 +537,9 @@ class Ho_Import_Model_Import extends Varien_Object
         return Mage::helper('ho_import/log');
     }
 
+
     /**
+     * @throws Exception
      * @return \Ho_Import_Model_Import
      */
     protected function _importData()
@@ -551,7 +563,10 @@ class Ho_Import_Model_Import extends Varien_Object
                 $this->_getLog()->log($this->_getLog()->__('Type %s not found', $entityType));
             }
         } catch (Exception $e) {
-            $this->_getLog()->log($e->getMessage(), Zend_Log::ERR);
+            $seconds  = round(microtime(TRUE) - $timer, 2);
+            $this->_getLog()->log("Exception while running profile  {$this->getProfile()}, ran for $seconds seconds.", Zend_Log::CRIT);
+            Mage::printException($e);
+            exit;
         }
 
         $seconds           = round(microtime(TRUE) - $timer, 2);

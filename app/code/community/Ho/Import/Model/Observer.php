@@ -48,7 +48,7 @@ class Ho_Import_Model_Observer
             $import = Mage::getModel('ho_import/import');
             $import->setProfile($profile);
             $import->process();
-        } catch (Mage_Core_Exception $e) {
+        } catch (Exception $e) {
             Mage::helper('ho_import/log')->log($e->getMessage(), Zend_Log::CRIT);
             Mage::helper('ho_import/log')->log($e->getTraceAsString(), Zend_Log::CRIT);
         }
@@ -59,7 +59,7 @@ class Ho_Import_Model_Observer
     public function progressLog(Varien_Event_Observer $event) {
         $name = str_replace('fastsimpleimport_', '', $event->getEvent()->getName());
         $name = str_replace('before_', '', $name);
-        $name = ucfirst(str_replace('_',' ',$name));
+        $name = ucfirst(str_replace('_',' ',$name)).'...';
 
         Mage::helper('ho_import/log')->log($name);
     }
