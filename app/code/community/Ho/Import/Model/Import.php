@@ -197,13 +197,11 @@ class Ho_Import_Model_Import extends Varien_Object
             $errors[$e->getMessage()] = $lines;
         }
         foreach ($errors as $error => $lines) {
-            if (strlen($error) > 80) {
-                $error = substr($error, 0, 77) . ' ..';
-            }
-
             foreach ($lines as $line) {
                 $key                                   = $line - 1;
-                $logEntities[$entityMap[$key]][$error] = '__ERROR__';
+                if (isset($entityMap[$key])) {
+                    $logEntities[$entityMap[$key]][$error] = '__ERROR__';
+                }
             }
         }
         $this->_getLog()->log($logEntities, Zend_Log::DEBUG);
@@ -716,11 +714,6 @@ class Ho_Import_Model_Import extends Varien_Object
         $errorLines    = array();
         $errorsPerLine = array();
         foreach ($errors as $error => $lines) {
-
-            if (strlen($error) > 80) {
-                $error = substr($error, 0, 77) . ' ..';
-            }
-
             $errorLines = array_merge($errorLines, $lines);
             foreach ($lines as $line) {
 
