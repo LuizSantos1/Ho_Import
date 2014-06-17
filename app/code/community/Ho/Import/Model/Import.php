@@ -44,9 +44,6 @@ class Ho_Import_Model_Import extends Varien_Object
     const IMPORT_CONFIG_IMPORT_OPTIONS = 'global/ho_import/%s/import_options';
     const IMPORT_CONFIG_LOG_LEVEL      = 'global/ho_import/%s/log_level';
 
-    protected $_sourceAdapter = NULL;
-    protected $_fileName = NULL;
-
     /**
      * @var AvS_FastSimpleImport_Model_Import
      */
@@ -56,7 +53,7 @@ class Ho_Import_Model_Import extends Varien_Object
     {
         parent::_construct();
         ini_set('memory_limit', '2G');
-        $this->_fastSimpleImport = Mage::getSingleton('fastsimpleimport/import');
+        $this->_fastSimpleImport = Mage::getModel('fastsimpleimport/import');
     }
 
     /**
@@ -73,6 +70,7 @@ class Ho_Import_Model_Import extends Varien_Object
             Mage::throwException($this->_getLog()->__("Profile %s not found", $this->getProfile()));
         }
 
+        $this->_applyImportOptions();
         $this->_downloader();
 
         $entity = (string)$this->_getEntityType();
@@ -89,7 +87,6 @@ class Ho_Import_Model_Import extends Varien_Object
             return;
         }
 
-        $this->_applyImportOptions();
         if ($this->getDryrun()) {
             $this->_getLog()->log($this->_getLog()->__('Dry run %s rows from temp csv file (%s)', $this->getRowCount(), $this->_getFileName()));
             $errors = $this->_dryRun();
@@ -126,6 +123,7 @@ class Ho_Import_Model_Import extends Varien_Object
         /** @var SeekableIterator $sourceAdapter */
         $sourceAdapter = $this->getSourceAdapter();
         $this->_runEvent('process_before', $this->_getTransport()->setAdapter($sourceAdapter));
+        $this->_applyImportOptions();
 
         //search a line instead on specifying the line.
         $importData = $this->getImportData();
@@ -191,7 +189,6 @@ class Ho_Import_Model_Import extends Varien_Object
 
         $errors = array();
         try {
-            $this->_applyImportOptions();
             $errors = $this->_dryRun($entities);
         } catch (Exception $e) {
             $errors[$e->getMessage()] = $lines;
@@ -458,6 +455,7 @@ class Ho_Import_Model_Import extends Varien_Object
 
         $mapper = $this->_getMapper();
         $mapper->setItem($item);
+        $symbolForClearField = $this->_fastSimpleImport->getSymbolEmptyFields();
 
         $allFieldConfig = $mapper->getFieldConfig();
         //Step 1: Get the values for the fields
@@ -474,6 +472,11 @@ class Ho_Import_Model_Import extends Varien_Object
                     }
                 } elseif ($result !== NULL) {
                     $itemRows[$storeCode][0][$fieldName] = $result;
+                }
+
+                if ($symbolForClearField && isset($fieldConfig['@'])
+                    && (!isset($itemRows[$storeCode][0][$fieldName]) || !$itemRows[$storeCode][0][$fieldName])) {
+                    $itemRows[$storeCode][0][$fieldName] = $symbolForClearField;
                 }
             }
         }
@@ -520,11 +523,7 @@ class Ho_Import_Model_Import extends Varien_Object
 
     protected function _getFileName()
     {
-        if ($this->_fileName === NULL) {
-            $this->_fileName = Mage::getBaseDir('var') . DS . 'import' . DS . $this->getProfile() . '.csv';
-        }
-
-        return $this->_fileName;
+        return Mage::getBaseDir('var') . DS . 'import' . DS . $this->getProfile() . '.csv';
     }
 
     /**
@@ -607,46 +606,42 @@ class Ho_Import_Model_Import extends Varien_Object
      */
     public function getSourceAdapter()
     {
-        if ($this->_sourceAdapter === NULL) {
-            $source = $this->_getConfigNode(self::IMPORT_CONFIG_MODEL);
+        $source = $this->_getConfigNode(self::IMPORT_CONFIG_MODEL);
 
-            if (!$source) {
-                Mage::throwException($this->_getLog()->__('<source> not found for profile %s', $this->getProfile()));
-            }
-
-            $arguments = array();
-            foreach ($source->children() as $key => $value) {
-                $arguments[$key] = (string)$value;
-            }
-
-            if ($this->getSourceOptions() && is_array($this->getSourceOptions())) {
-                foreach ($this->getSourceOptions() as $key => $value) {
-                    $arguments[$key] = (string)$value;
-                }
-            }
-
-            if (isset($arguments['file']) && !is_readable($arguments['file'])) {
-                $arguments['file'] = Mage::getBaseDir() . DS . (string)$source->file;
-                if (!is_readable($arguments['file'])) {
-                    Mage::throwException(Mage::helper('importexport')->__("%s file does not exists or is not readable", $source->file));
-                }
-            }
-
-            if (count($arguments) == 1 && isset($arguments['file'])) {
-                $arguments = $arguments['file'];
-            }
-
-            $this->_getLog()->log($this->_getLog()->__('Getting source adapter %s', $source->getAttribute('model')));
-            $importModel = Mage::getModel($source->getAttribute('model'), $arguments);
-
-            if (!$importModel) {
-                Mage::throwException($this->_getLog()->__('Import model (%s) not found for profile %s', $source->getAttribute('model'), $this->getProfile()));
-            }
-
-            $this->_sourceAdapter = $importModel;
+        if (!$source) {
+            Mage::throwException($this->_getLog()->__('<source> not found for profile %s', $this->getProfile()));
         }
 
-        return $this->_sourceAdapter;
+        $arguments = array();
+        foreach ($source->children() as $key => $value) {
+            $arguments[$key] = (string)$value;
+        }
+
+        if ($this->getSourceOptions() && is_array($this->getSourceOptions())) {
+            foreach ($this->getSourceOptions() as $key => $value) {
+                $arguments[$key] = (string)$value;
+            }
+        }
+
+        if (isset($arguments['file']) && !is_readable($arguments['file'])) {
+            $arguments['file'] = Mage::getBaseDir() . DS . (string)$source->file;
+            if (!is_readable($arguments['file'])) {
+                Mage::throwException(Mage::helper('importexport')->__("%s file does not exists or is not readable", $source->file));
+            }
+        }
+
+        if (count($arguments) == 1 && isset($arguments['file'])) {
+            $arguments = $arguments['file'];
+        }
+
+        $this->_getLog()->log($this->_getLog()->__('Getting source adapter %s', $source->getAttribute('model')));
+        $importModel = Mage::getModel($source->getAttribute('model'), $arguments);
+
+        if (!$importModel) {
+            Mage::throwException($this->_getLog()->__('Import model (%s) not found for profile %s', $source->getAttribute('model'), $this->getProfile()));
+        }
+
+        return $importModel;
     }
 
     /**
