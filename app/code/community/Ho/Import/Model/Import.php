@@ -186,7 +186,7 @@ class Ho_Import_Model_Import extends Varien_Object
 
             $lines = array($sourceAdapter->key());
         } elseif (!count($lines)) {
-            $lines = array(1);
+            $lines = array(0); // CS: start from line 0
         }
 
         $entities    = array();
