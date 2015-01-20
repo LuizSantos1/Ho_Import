@@ -14,7 +14,7 @@
  *
  * @category    Ho
  * @package     Ho_Import
- * @copyright   Copyright © 2013 H&O (http://www.h-o.nl/)
+ * @copyright   Copyright © 2014 H&O (http://www.h-o.nl/)
  * @license     http://opensource.org/licenses/osl-3.0.php  Open Software License (OSL 3.0)
  * @author      Paul Hachmang – H&O <info@h-o.nl>
  *
@@ -375,7 +375,7 @@ class Ho_Import_Model_Source_Adapter_Xml implements SeekableIterator
                         $aPositions[] = $iPos;
                     }
                 }
-                $minPos = min($aPositions);
+                $minPos = count($aPositions) > 0 ? min($aPositions) : false;
                 if ($minPos !== false && $minPos != 0) {
                     $sElementName = substr($element, 0, $minPos);
                     $endTag       = "</" . $sElementName . ">";

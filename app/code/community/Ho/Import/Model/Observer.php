@@ -14,7 +14,7 @@
  *
  * @category    Ho
  * @package     Ho_Import
- * @copyright   Copyright © 2013 H&O (http://www.h-o.nl/)
+ * @copyright   Copyright © 2014 H&O (http://www.h-o.nl/)
  * @license     http://opensource.org/licenses/osl-3.0.php  Open Software License (OSL 3.0)
  * @author      Paul Hachmang – H&O <info@h-o.nl>
  *
@@ -62,5 +62,83 @@ class Ho_Import_Model_Observer
         $name = ucfirst(str_replace('_',' ',$name)).'...';
 
         Mage::helper('ho_import/log')->log($name);
+    }
+
+    
+    /**
+     * @event catalog_product_edit_action
+     * @param Varien_Event_Observer $observer
+     */
+    public function catalogProductEditAction(Varien_Event_Observer $observer) {
+        /** @var Mage_Catalog_Model_Product $product */
+        $product = $observer->getProduct();
+        $this->_lockAttributes($product);
+    }
+
+
+    /**
+     * @param Varien_Event_Observer $observer
+     */
+    public function catalogCategoryEditAction(Varien_Event_Observer $observer) {
+        /** @var Mage_Core_Controller_Request_Http $request */
+        $request = $observer->getAction()->getRequest();
+
+        if ($request->getControllerName() !== 'catalog_category'
+           || $request->getModuleName() !== 'admin') {
+            return;
+        }
+
+        $category = Mage::registry('current_category');
+        $this->_lockAttributes($category);
+    }
+
+
+    /**
+     * @param Mage_Catalog_Model_Abstract $model
+     */
+    protected function _lockAttributes(Mage_Catalog_Model_Abstract $model) {
+        // Is product assigned to import profile.
+        if (! ($profiles = $model->getData('ho_import_profile'))){
+            return;
+        }
+
+        $profiles = explode(',',$profiles);
+        foreach ($profiles as $profile) {
+            // Is lock attributes functionality enabled.
+            $lockAttributes = sprintf('global/ho_import/%s/import_options/lock_attributes', $profile);
+            $fieldMapNode = Mage::getConfig()->getNode($lockAttributes);
+            if (!$fieldMapNode || !$fieldMapNode->asArray()) {
+                continue;
+            }
+
+            // Get the mapper.
+            /** @var Ho_Import_Model_Mapper $mapper */
+            $mapper = Mage::getModel('ho_import/mapper');
+            $mapper->setProfileName($profile);
+            $storeCode = $model->getStore()->getCode();
+
+            // Check if attributes need to be locked.
+            $attributes = $model->getAttributes();
+            foreach ($attributes as $attribute) {
+                /** @var Mage_Catalog_Model_Resource_Eav_Attribute $attribute */
+                $mapper->setStoreCode($attribute->isScopeStore() || $attribute->isScopeWebsite() ? $storeCode :'admin');
+
+                $fieldConfig = $mapper->getFieldConfig($attribute->getAttributeCode());
+                if (isset($fieldConfig['@'])) {
+                    $note = $attribute->getNote() ? $attribute->getNote() : '';
+
+                    //scope global, website
+                    if (! $model->isLockedAttribute($attribute->getAttributeCode())) {
+                        if ($note) {
+                            $note .= "<br />\n";
+                        }
+                        $note .= Mage::helper('ho_import')->__("Locked by Ho_Import");
+                    }
+
+                    $model->lockAttribute($attribute->getAttributeCode());
+                    $attribute->setNote($note);
+                }
+            }
+        }
     }
 }

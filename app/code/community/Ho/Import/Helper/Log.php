@@ -37,6 +37,28 @@ class Ho_Import_Helper_Log extends Mage_Core_Helper_Abstract
         mb_internal_encoding('UTF-8');
     }
 
+
+    /**
+     * @param string $file
+     * @return $this
+     */
+    public function setLogfile($file) {
+        $this->_logfile = $file;
+        return $this;
+    }
+
+
+    /**
+     * @return string
+     */
+    public function getLogfile() {
+        return $this->_logfile;
+    }
+
+
+    /**
+     * @param int $level
+     */
     public function setMinLogLevel($level) {
         if (! is_numeric($level)) {
             Mage::throwException($this->__('The min log level should be numeric, %s given', $level));
@@ -231,36 +253,6 @@ class Ho_Import_Helper_Log extends Mage_Core_Helper_Abstract
      */
     public function done()
     {
-        if ($this->_mode == self::LOG_MODE_NOTIFICATION) {
-            /* @var $inbox Mage_AdminNotification_Model_Inbox */
-            $inbox = Mage::getModel('adminnotification/inbox');
-
-            $lowestLevel = array_search(min($this->_logEntries), $this->_logEntries);
-            if ($lowestLevel > $this->_minLogLevel) {
-                return;
-            }
-
-            switch($lowestLevel)
-            {
-                case Zend_Log::EMERG:
-                case Zend_Log::ALERT:
-                case Zend_Log::CRIT:
-                case Zend_Log::ERR:
-                case Zend_Log::WARN:
-                    $firstRow = reset($this->_logEntries);
-                    $inbox->addCritical(reset($firstRow), $this->getLogHtml());
-                    break;
-                case Zend_Log::DEBUG:
-                    $firstRow = reset($this->_logEntries);
-                    $inbox->addNotice(reset($firstRow), $this->getLogHtml());
-                    break;
-                default:
-                    $firstRow = reset($this->_logEntries);
-                    $inbox->addMinor(reset($firstRow), $this->getLogHtml());
-                    break;
-            }
-        }
-
         $this->_logEntries = array();
     }
 

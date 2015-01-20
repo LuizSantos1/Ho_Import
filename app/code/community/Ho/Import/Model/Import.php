@@ -38,6 +38,7 @@ class Ho_Import_Model_Import extends Varien_Object
     const IMPORT_TYPE_CATEGORY_PRODUCT = 'catalog_category_product';
 
     const IMPORT_CONFIG_DOWNLOADER     = 'global/ho_import/%s/downloader';
+    const IMPORT_CONFIG_DECOMPRESSOR   = 'global/ho_import/%s/decompressor';
     const IMPORT_CONFIG_MODEL          = 'global/ho_import/%s/source';
     const IMPORT_CONFIG_ENTITY_TYPE    = 'global/ho_import/%s/entity_type';
     const IMPORT_CONFIG_EVENTS         = 'global/ho_import/%s/events';
@@ -52,7 +53,7 @@ class Ho_Import_Model_Import extends Varien_Object
     protected function _construct()
     {
         parent::_construct();
-        ini_set('memory_limit', '2G');
+        ini_set('memory_limit', '2048M');
         $this->_fastSimpleImport = Mage::getModel('fastsimpleimport/import');
     }
 
@@ -72,6 +73,7 @@ class Ho_Import_Model_Import extends Varien_Object
 
         $this->_applyImportOptions();
         $this->_downloader();
+        $this->_decompressor();
 
         $entity = (string)$this->_getEntityType();
         $method = '_import' . ucfirst(Mage::helper('ho_import')->underscoreToCamelCase($entity));
@@ -81,7 +83,6 @@ class Ho_Import_Model_Import extends Varien_Object
         }
 
         $this->_getLog()->log($this->_getLog()->__('Mapping source fields and saving to temp csv file (%s)', $this->_getFileName()));
-        $this->_runEvent('process_before', $this->_getTransport()->setAdapter($this->getSourceAdapter()));
         $hasRows = $this->_createImportCsv();
         if (! $hasRows) {
             $this->_runEvent('process_after');
@@ -145,13 +146,17 @@ class Ho_Import_Model_Import extends Varien_Object
      */
     public function mapLines($lines)
     {
+        if (! is_string($this->getProfile())) {
+            Mage::throwException($this->_getLog()->__("No profile specified"));
+        }
         if (!array_key_exists($this->getProfile(), $this->getProfiles())) {
             Mage::throwException($this->_getLog()->__("Profile %s not found", $this->getProfile()));
         }
 
         $this->_downloader();
+        $this->_decompressor();
 
-        if ($lines === '0') {
+        if (! $lines) {
             $lines = array(0);
         } else {
             $lines = $lines ? explode(',', $lines) : array();
@@ -277,7 +282,7 @@ class Ho_Import_Model_Import extends Varien_Object
 
         $model = Mage::getModel($downloader->getAttribute('model'));
         if (!$model) {
-            Mage::throwException($this->_getLog()->__("Trying to load %s, model not found %s", $downloader));
+            Mage::throwException($this->_getLog()->__("Trying to load %s, model not found", $downloader->getAttribute('model')));
         }
 
         if (!$model instanceof Ho_Import_Model_Downloader_Abstract) {
@@ -295,6 +300,48 @@ class Ho_Import_Model_Import extends Varien_Object
         try {
             $model->download($transport, $target);
         } catch (Exception $e) {
+            $this->_getLog()->log($this->_getLog()->__("Error while downloading external file (%s):", $downloader->getAttribute('model')), Zend_Log::ERR);
+            Mage::throwException($e->getMessage());
+        }
+    }
+
+
+    protected function _decompressor()
+    {
+        $data = $this->getImportData();
+        if (isset($data['skip_decompress']) && $data['skip_decompress'] == 1) {
+            return;
+        }
+
+        $decompressor = $this->_getConfigNode(self::IMPORT_CONFIG_DECOMPRESSOR);
+
+        if (!$decompressor) {
+            return;
+        }
+
+        if (!$decompressor->getAttribute('model')) {
+            Mage::throwException($this->_getLog()->__("No attribute model found for <downloader> node"));
+        }
+
+        $model = Mage::getModel($decompressor->getAttribute('model'));
+        if (!$model) {
+            Mage::throwException($this->_getLog()->__("Trying to load %s, model not found", $decompressor->getAttribute('model')));
+        }
+
+        if (!$model instanceof Ho_Import_Model_Decompressor_Abstract) {
+            Mage::throwException($this->_getLog()->__("Decompressor model %s must be instance of Ho_Import_Model_Decompressor_Abstract", $decompressor->getAttribute('model')));
+        }
+
+        $args = array_merge($decompressor->asArray());
+        unset($args['@']);
+
+        $transport = $this->_getTransport();
+        $transport->addData($args);
+
+        try {
+            $model->decompress($transport);
+        } catch (Exception $e) {
+            $this->_getLog()->log($this->_getLog()->__("Error while decompressing file (%s):", $decompressor->getAttribute('model')), Zend_Log::ERR);
             Mage::throwException($e->getMessage());
         }
     }
@@ -303,6 +350,7 @@ class Ho_Import_Model_Import extends Varien_Object
     {
         /** @var SeekableIterator $sourceAdapter */
         $sourceAdapter = $this->getSourceAdapter();
+        $this->_runEvent('process_before', $this->_getTransport()->setAdapter($sourceAdapter));
         $timer = microtime(TRUE);
 
         /** @var Mage_ImportExport_Model_Export_Adapter_Abstract $exportAdapter */
@@ -492,6 +540,8 @@ class Ho_Import_Model_Import extends Varien_Object
         $mapper = $this->_getMapper();
         $mapper->setItem($item);
         $symbolForClearField = $this->_fastSimpleImport->getSymbolEmptyFields();
+        $profile = $this->getProfile();
+
 
         $allFieldConfig = $mapper->getFieldConfig();
         //Step 1: Get the values for the fields
@@ -520,12 +570,16 @@ class Ho_Import_Model_Import extends Varien_Object
         //Step 2: Flatten all the rows.
         $flattenedRows = array();
         foreach ($itemRows as $store => $storeData) {
-            foreach ($storeData as $storeRow) {
+            foreach ($storeData as $storeKey => $storeRow) {
                 $flatRow = array();
                 foreach ($allFieldConfig[$store] as $key => $column) {
                     if (isset($storeRow[$key]) && (strlen($storeRow[$key]))) {
                         $flatRow[$key] = (string)$storeRow[$key];
                     }
+                }
+
+                if ($store == 'admin' && $storeKey == 0 && !isset($flatRow['ho_import_profile'])) {
+                    $flatRow['ho_import_profile'] = $profile;
                 }
 
                 if ($flatRow) {
