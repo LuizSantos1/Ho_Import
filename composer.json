@@ -6,7 +6,7 @@
     "homepage": "https://github.com/ho-nl/Ho_Import",
     "require": {
         "magento-hackathon/magento-composer-installer": "*",
-        "avstudnitz/fast-simple-import": "*"
+        "zookal/avstudnitz-fast-simple-import": "*"
     },
     "authors":[
         {
