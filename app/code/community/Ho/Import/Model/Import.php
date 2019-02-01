@@ -53,7 +53,6 @@ class Ho_Import_Model_Import extends Varien_Object
     protected function _construct()
     {
         parent::_construct();
-        ini_set('memory_limit', '2048M');
         $this->_fastSimpleImport = Mage::getModel('fastsimpleimport/import');
     }
 
