@@ -99,20 +99,6 @@ class Ho_Import_Shell_Productimport extends Mage_Shell_Abstract
             $import->setProfile($profile);
             $import->setImportData($this->_args);
             $import->setDryrun($this->getArg('dryrun'));
-            if (isset($this->_args['variables'])){
-                $args = explode(',', $this->getArg('variables'));
-                $variables = array();
-                foreach ($args as $arg) {
-                    $argArr = explode('=', $arg);
-                    $variables["$" . $argArr[0]] = $argArr[1];
-                }
-                if (!isset($variables['$limit_string']) || !isset($variables['$source'])) {
-                    echo "source and limit_string required\n";
-                    echo "php hoimport.php -action import -profile configurable_products -variables source=\"taylorfrancis\",limit_string=\"limit 1000\" \n";
-                    return;
-                }
-                $import->setSourceOptions(array('query_variables' => serialize($variables)));
-            }
             $import->process();
         } catch (Mage_Core_Exception $e) {
             Mage::helper('ho_import/log')->log($e->getMessage(), Zend_Log::CRIT);
